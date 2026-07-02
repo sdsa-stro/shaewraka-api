@@ -1,0 +1,15 @@
+{
+	"name": "shaewrakin-translate",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-06-01",
+	"observability": {
+		"enabled": true
+	},
+	"kv_namespaces": [
+		{
+			"binding": "LEXICON_CACHE",
+			"id": "c605385251e84535a39f6485899f9421",
+			"preview_id": "d81447b78f014d1e84d624ec7bc7249a"
+		}
+	]
+}
