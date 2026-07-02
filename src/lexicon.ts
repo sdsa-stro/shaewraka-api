@@ -159,7 +159,15 @@ export class Lexicon {
 
     lookupEnglish(word: string): LexiconEntry[] {
         const results = this.byEnglish.get(word.toLowerCase()) ?? [];
-        return [...results].sort((a, b) => Number(a.deprecated) - Number(b.deprecated));
+        const sorted = [...results].sort((a, b) => Number(a.deprecated) - Number(b.deprecated));
+        // TEMP DEBUG
+        /* if (word === "account") {
+            console.log("account lookup:", sorted.map(e => `${e.word} deprecated=${e.deprecated}`));
+        }
+        if (word === "account") {
+            console.log("rækøntøn notes:", results.find(e => e.word === "rækøntøn")?.notes);
+        } */
+        return sorted;
     }
 
     get verbs(): LexiconEntry[] {
@@ -191,8 +199,10 @@ function splitEnglishGlosses(english: string): string[] {
         glosses.add(piece);
         if (piece.toLowerCase().startsWith("to ")) {
             glosses.add(piece.slice(3).trim());
-        } else {
-
+        }
+        const individualWords = piece.split(/\s+/).filter(w => w.length > 3);
+        for (const word of individualWords) {
+            glosses.add(word);
         }
     }
     return Array.from(glosses);

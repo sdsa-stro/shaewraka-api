@@ -91,52 +91,83 @@ const ENGLISH_INSTITUTIONAL_TYPES = new Set([
     "government",
     "military",
     "department",
-    "ministry",
-    "service"
+    "ministry"
 ]);
 
 function tryMatchInstitutionalPhrase(
     tokens: EnglishToken[],
     startIdx: number,
-    lexicon: Lexicon,
-    formal: boolean
+    lexicon: Lexicon
 ): { output: ShrWordOutput[]; consumed: number } | undefined {
     const tok = tokens[startIdx];
 
     if (!ENGLISH_INSTITUTIONAL_TYPES.has(tok.lower)) return undefined;
 
     const typeEntries = lexicon.lookupEnglish(tok.lower)
-        .filter(e => e.pos === "Noun" || e.pos === "Proper Noun");
+        .filter(e => !e.deprecated && (e.pos === "Noun" || e.pos === "Proper Noun"));
     if (typeEntries.length === 0) return undefined;
 
-    const typeEntry = typeEntries[0];
-    const typeWord = typeEntry.word;
+    const triggerShr = typeEntries[0].word;
 
-    const nameComponents: ShrWordOutput[] = [];
+    const rawComponents: EnglishToken[] = [];
     let j = startIdx + 1;
-
     while (j < tokens.length) {
         const next = tokens[j];
-        if (next.lower === "of" || next.lower === "the" || next.lower === "a") {
+        if (["of", "the", "a", "an"].includes(next.lower)) {
             j++;
             continue;
         }
-        const isProperNoun = next.raw[0] === next.raw[0].toUpperCase() &&
-            next.raw[0] !== next.raw[0].toLowerCase();
-        if (!isProperNoun) break;
-
-        const entries = lexicon.lookupEnglish(next.lower);
-        const shr = entries.length > 0 ? entries[0].word : next.raw;
-        nameComponents.push({ shr, englishSource: next.raw });
+        const firstChar = next.raw[0];
+        const isCapitalised = firstChar === firstChar.toUpperCase() && firstChar !== firstChar.toLowerCase();
+        if (!isCapitalised) break;
+        rawComponents.push(next);
         j++;
     }
 
-    if (nameComponents.length === 0) return undefined;
+    if (rawComponents.length === 0) return undefined;
 
-    const result: ShrWordOutput[] = [
-        { shr: typeWord, englishSource: tok.raw },
-        ...nameComponents
-    ];
+    const TYPE_WORDS_EN = new Set(["agency", "service", "digital", "defense", "forces", "house", "congress"]);
+    interface Component { raw: EnglishToken; shr: string; isTypeWord: boolean; }
+    const allTypeWords: Component[] = [];
+    const descriptors: Component[] = [];
+    const properNames: Component[] = [];
+
+    for (const comp of rawComponents) {
+        const compEntries = lexicon.lookupEnglish(comp.lower).filter(e => !e.deprecated);
+        const shr = compEntries.length > 0 ? compEntries[0].word : comp.raw;
+        const isTypeWord = TYPE_WORDS_EN.has(comp.lower);
+        const isProperName = compEntries.length === 0 || /[æøəíîŋ]/i.test(comp.raw);
+
+        if (isTypeWord && !isProperName) {
+            allTypeWords.push({ raw: comp, shr, isTypeWord: true });
+        } else if (isProperName) {
+            properNames.push({ raw: comp, shr, isTypeWord: false });
+        } else {
+            descriptors.push({ raw: comp, shr, isTypeWord: false });
+        }
+    }
+
+    const result: ShrWordOutput[] = [];
+    const mostSpecificType = allTypeWords.length > 0 ? allTypeWords[allTypeWords.length - 1] : null;
+
+    if (mostSpecificType) {
+        result.push({ shr: mostSpecificType.shr, englishSource: mostSpecificType.raw.raw });
+        for (const tw of allTypeWords) {
+            if (tw !== mostSpecificType) result.push({ shr: tw.shr, englishSource: tw.raw.raw });
+        }
+        for (const d of descriptors) result.push({ shr: d.shr, englishSource: d.raw.raw });
+        for (const pn of properNames) result.push({ shr: pn.shr, englishSource: pn.raw.raw });
+        result.push({ shr: triggerShr, englishSource: tok.raw });
+    } else {
+        result.push({ shr: triggerShr, englishSource: tok.raw });
+        for (const d of descriptors) result.push({ shr: d.shr, englishSource: d.raw.raw });
+        for (const pn of properNames) result.push({ shr: pn.shr, englishSource: pn.raw.raw });
+    }
+
+    if (result.length > 0) {
+        result[0].shr = result[0].shr.charAt(0).toUpperCase() + result[0].shr.slice(1);
+    }
+
     return { output: result, consumed: j - startIdx };
 }
 
@@ -251,6 +282,7 @@ export function translateEnToShr(sentence: string, lexicon: Lexicon, options: Tr
     let subjectPerson: Person | undefined;
     let subjectGender: ThirdPersonGender = defaultGender;
     let pendingNegation = false;
+    let skipNextArticle = false;
     let sawVerbOrToBeYet = false;
     let verbWasCopula = false;
     let forcedFutureNext = false;
@@ -266,30 +298,45 @@ export function translateEnToShr(sentence: string, lexicon: Lexicon, options: Tr
 
         if (tok.lower in DEMONSTRATIVES) {
             output.push({ shr: DEMONSTRATIVES[tok.lower], englishSource: tok.raw });
+            i++;
+            continue;
         }
 
-        const institutionalMatch = tryMatchInstitutionalPhrase(tokens, i, lexicon, options.formal);
+        const institutionalMatch = tryMatchInstitutionalPhrase(tokens, i, lexicon);
         if (institutionalMatch) {
             output.push(...institutionalMatch.output);
             i += institutionalMatch.consumed;
             continue;
         }
 
-        if (ARTICLES.has(tok.lower)) {
-            const shrWord = tok.lower === "the" ? "gə" : "a";
-            output.push({ shr: shrWord, englishSource: tok.raw });
-            i++;
-            continue;
-        }
-
         if (tok.lower === "of") {
+            let k = i + 1;
+            while (k < tokens.length && ARTICLES.has(tokens[k].lower)) k++;
+            const upcomingIsInstitutional = k < tokens.length && ENGLISH_INSTITUTIONAL_TYPES.has(tokens[k].lower);
+
             const lastOutput = output[output.length - 1];
             const lastIsInstitutional = lastOutput &&
                 INSTITUTIONAL_TYPE_WORDS.has(lastOutput.shr.toLowerCase());
 
-            if (!lastIsInstitutional) {
+            if (!lastIsInstitutional && !upcomingIsInstitutional) {
                 output.push({ shr: "lu", englishSource: tok.raw });
             }
+
+            if (upcomingIsInstitutional) {
+                skipNextArticle = true;
+            }
+            i++;
+            continue;
+        }
+
+        if (ARTICLES.has(tok.lower)) {
+            if (skipNextArticle) {
+                skipNextArticle = false;
+                i++;
+                continue;
+            }
+            const shrWord = tok.lower === "the" ? "gə" : "a";
+            output.push({ shr: shrWord, englishSource: tok.raw });
             i++;
             continue;
         }
@@ -344,7 +391,7 @@ export function translateEnToShr(sentence: string, lexicon: Lexicon, options: Tr
             continue;
         }
         const lemma = lemmatizeVerb(tok.lower);
-        const verbEntries = lexicon.lookupEnglish(lemma).filter((e) => e.pos === "Verb");
+        const verbEntries = lexicon.lookupEnglish(lemma).filter((e) => e.pos === "Verb" && !e.deprecated);
         if (verbEntries.length > 0 && !sawVerbOrToBeYet) {
             const entry = verbEntries[0];
             const tense: Tense = forcedFutureNext ? "future" : detectTenseFromVerbForm(tok.lower, lemma);
@@ -364,11 +411,11 @@ export function translateEnToShr(sentence: string, lexicon: Lexicon, options: Tr
             i++;
             continue;
         }
-        const direct = lexicon.lookupEnglish(tok.lower);
+        const direct = lexicon.lookupEnglish(tok.lower).filter(e => !e.deprecated);
         const plural = detectEnglishPlural(tok.lower);
 
         const lookupWord = direct.length > 0 ? tok.lower : plural.singular;
-        const entryMatches = direct.length > 0 ? direct : lexicon.lookupEnglish(lookupWord);
+        const entryMatches = direct.length > 0 ? direct : lexicon.lookupEnglish(lookupWord).filter(e => !e.deprecated);
         const needsExplicitPluralization = direct.length === 0 && plural.isPlural && entryMatches.length > 0;
 
         if (entryMatches.length > 0) {
@@ -399,7 +446,13 @@ export function translateEnToShr(sentence: string, lexicon: Lexicon, options: Tr
             continue;
         }
 
-        output.push({ shr: `[${tok.raw}]`, englishSource: tok.raw, unresolved: true });
+        const firstChar = tok.raw[0] ?? "";
+        const isCapitalisedToken = firstChar === firstChar.toUpperCase() && firstChar !== firstChar.toLowerCase() && i > 0;
+        if (isCapitalisedToken) {
+            output.push({ shr: tok.raw, englishSource: tok.raw });
+        } else {
+            output.push({ shr: `[${tok.raw}]`, englishSource: tok.raw, unresolved: true });
+        }
         i++;
     }
 

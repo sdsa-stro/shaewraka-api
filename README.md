@@ -1,4 +1,12 @@
-# How to use API
+# What is this API for?
+This is an Official API from the Republic of Shæwraka Digital Service Agency Strø. that allows anyone to translate to and from our language, Shæwrakin.
+
+If you want to look up words yourself, please consider checking out the [Shæwrakin Lexicon](https://albinofoxgithub.github.io/ShaewrakanLexicon/).
+
+### Note
+This API is currently under development. It will translate most text correctly, but may not be 100% accurate. If you are concerned about being completely accurate in your translations, we suggest reaching out to us directly ([github@shaewraka.org](mailto:github@shaewraka.org)), or asking a native Shæwrakan.
+
+## How to use API
 To use this API, simply sent a `POST` request to the URL.
 
 #### Required Fields
