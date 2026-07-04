@@ -2,7 +2,7 @@
   "name": "shaewraka-translate",
   "private": true,
   "scripts": {
-    "dev": "wranger dev",
+    "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

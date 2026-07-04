@@ -10,7 +10,7 @@ export interface Env {
 const LEXICON_KV_KEY = "lexicon";
 const CACHE_TTL_SECONDS = 60 * 60;
 
-const LEXICON_GITHUB_URL = "https://raw.githubusercontent.com/AlbinoFoxGithub/ShaewrakanLexicon/refs/heads/main/lexicon.json";
+const LEXICON_GITHUB_URL = "https://raw.githubusercontent.com/sdsa-stro/ShaewrakanLexicon/refs/heads/main/lexicon.json";
 
 let MODULE_LEXICON_CACHE: Lexicon | null = null;
 let MODULE_LEXICON_ETAG: string | null = null;
