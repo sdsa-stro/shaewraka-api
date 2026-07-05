@@ -167,9 +167,9 @@ export default {
 
         try {
             switch (url.pathname) {
-                case "/shr-to-en":
+                case "/v1/translate/shr-to-en":
                     return await handleShrToEn(request, env);
-                    case "/en-to-shr":
+                    case "/v1/translate/en-to-shr":
                         return await handleEnToShr(request, env);
                 case "/refresh-lexicon":
                     await env.LEXICON_CACHE.delete(LEXICON_KV_KEY);
